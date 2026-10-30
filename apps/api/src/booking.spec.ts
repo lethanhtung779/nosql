@@ -1,0 +1,1 @@
+describe('Quy tắc giao thoa',()=>{const overlap=(a:number,b:number,c:number,d:number)=>a<d&&b>c;it('phát hiện giao nhau',()=>expect(overlap(1,5,3,7)).toBe(true));it('cho phép nối tiếp',()=>expect(overlap(1,5,5,7)).toBe(false))});

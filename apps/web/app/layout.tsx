@@ -1,0 +1,1 @@
+import type{Metadata}from'next';import'./globals.css';export const metadata:Metadata={title:'Lumière Spa & Salon',description:'Đặt lịch spa và salon trực tuyến'};export default function Layout({children}:{children:React.ReactNode}){return<html lang="vi"><body>{children}</body></html>}

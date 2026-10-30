@@ -1,0 +1,14 @@
+{
+  "name": "spa-salon-nosql",
+  "version": "2.0.0",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "concurrently -n API,WEB -c green,cyan \"npm run dev -w @spa/api\" \"npm run dev -w @spa/web\"",
+    "build": "npm run build -w @spa/api && npm run build -w @spa/web",
+    "start": "concurrently -n API,WEB \"npm run start:prod -w @spa/api\" \"npm run start -w @spa/web\"",
+    "seed": "npm run seed -w @spa/api",
+    "test": "npm run test -w @spa/api"
+  },
+  "devDependencies": { "concurrently": "^9.1.2" }
+}

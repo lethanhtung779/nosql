@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Đặt lịch Spa và Salon nhanh chóng">
+  <title>Lumière Spa & Salon</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="nav">
+    <a href="#home" class="brand"><span>L</span>Lumière</a>
+    <nav><a href="#services">Dịch vụ</a><a href="#booking">Đặt lịch</a><a href="#appointments">Lịch của tôi</a></nav>
+    <button id="authButton" class="button ghost">Đăng nhập</button>
+  </header>
+
+  <main>
+    <section class="hero" id="home">
+      <div class="hero-copy">
+        <p class="eyebrow">SPA & SALON · TP HỒ CHÍ MINH</p>
+        <h1>Đẹp hơn, thư thái hơn, theo cách của bạn.</h1>
+        <p class="lead">Chọn dịch vụ, chuyên viên và khung giờ phù hợp. Lumière chăm sóc phần còn lại.</p>
+        <a class="button primary" href="#booking">Đặt lịch ngay <span>→</span></a>
+        <div class="trust"><span><b>4.9</b> đánh giá</span><span><b>2</b> chi nhánh</span><span><b>15 phút</b> xác nhận</span></div>
+      </div>
+      <div class="hero-art" aria-label="Không gian chăm sóc tại Lumière">
+        <div class="arch"><div class="sun"></div><div class="leaf leaf-a"></div><div class="leaf leaf-b"></div><div class="bottle one"></div><div class="bottle two"></div></div>
+      </div>
+    </section>
+
+    <section class="section" id="services">
+      <div class="section-heading"><div><p class="eyebrow">DỊCH VỤ NỔI BẬT</p><h2>Chăm sóc trọn vẹn</h2></div><p>Từ mái tóc đến làn da, mỗi liệu trình được thiết kế để bạn cảm thấy tự tin và được nâng niu.</p></div>
+      <div id="serviceCards" class="service-grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+    </section>
+
+    <section class="booking-section" id="booking">
+      <div class="booking-intro"><p class="eyebrow">ĐẶT LỊCH TRỰC TUYẾN</p><h2>Một cuộc hẹn dành riêng cho bạn</h2><p>Hoàn tất trong chưa đầy hai phút. Hệ thống tự động kiểm tra để bảo đảm chuyên viên không bị trùng lịch.</p><ol><li><span>1</span> Chọn chi nhánh</li><li><span>2</span> Chọn dịch vụ và chuyên viên</li><li><span>3</span> Chọn thời gian</li></ol></div>
+      <form id="bookingForm" class="booking-card">
+        <label>Chi nhánh<select id="branch" required><option value="">Đang tải...</option></select></label>
+        <label>Dịch vụ<div id="serviceOptions" class="checks"><span>Vui lòng chọn chi nhánh</span></div></label>
+        <label>Chuyên viên<select id="staff" required><option value="">Chọn chi nhánh trước</option></select></label>
+        <div class="row"><label>Ngày<input id="date" type="date" required></label><label>Giờ<input id="time" type="time" min="08:30" max="20:30" step="1800" required></label></div>
+        <label>Ghi chú<textarea id="note" rows="3" placeholder="Mong muốn kiểu tóc, tình trạng da..."></textarea></label>
+        <div id="summary" class="summary"><span>Tổng thời lượng</span><b>0 phút · 0 ₫</b></div>
+        <button class="button primary full" type="submit">Xác nhận đặt lịch</button>
+        <p id="bookingMessage" class="message" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="section appointments" id="appointments">
+      <div class="section-heading"><div><p class="eyebrow">LỊCH CỦA TÔI</p><h2>Hẹn sắp tới và lịch sử</h2></div><button id="refreshAppointments" class="button ghost">Làm mới</button></div>
+      <div id="appointmentList" class="appointment-list"><p class="empty">Đăng nhập để xem lịch hẹn của bạn.</p></div>
+    </section>
+  </main>
+
+  <footer><a class="brand" href="#home"><span>L</span>Lumière</a><p>Không gian chăm sóc sắc đẹp hiện đại, tận tâm.</p><p>© 2026 Lumière Spa & Salon</p></footer>
+
+  <dialog id="authDialog">
+    <button class="close" aria-label="Đóng">×</button>
+    <p class="eyebrow">CHÀO MỪNG BẠN</p><h2 id="authTitle">Đăng nhập</h2>
+    <form id="authForm">
+      <label id="nameField" hidden>Họ và tên<input id="authName" autocomplete="name"></label>
+      <label>Số điện thoại<input id="authPhone" inputmode="numeric" autocomplete="tel" placeholder="0900000004" required></label>
+      <label>Mật khẩu<input id="authPassword" type="password" autocomplete="current-password" placeholder="123456" required></label>
+      <button class="button primary full" type="submit">Tiếp tục</button><p id="authMessage" class="message"></p>
+    </form>
+    <button id="authSwitch" class="text-button">Chưa có tài khoản? Đăng ký</button>
+    <p class="demo">Dùng thử: 0900000004 / 123456</p>
+  </dialog>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

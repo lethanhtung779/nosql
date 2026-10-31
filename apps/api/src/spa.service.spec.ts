@@ -18,8 +18,10 @@ describe('SpaService rollback', () => {
     const appointments = { create: jest.fn().mockRejectedValue(new Error('Mongo write failed')) };
     const reviews = {};
     const calendars = { findOneAndUpdate: jest.fn().mockResolvedValue({}), updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }) };
+    const categories = { find: jest.fn(), exists: jest.fn() };
     const redis = { getHold: jest.fn().mockResolvedValue(hold), releaseHold: jest.fn() };
-    const spa = new SpaService(users as any, branches as any, services as any, appointments as any, reviews as any, calendars as any, redis as any);
+    const audits = { create: jest.fn() };
+    const spa = new SpaService(users as any, branches as any, services as any, appointments as any, reviews as any, calendars as any, categories as any, redis as any, audits as any);
 
     await expect(spa.book({ branch_id: branchId, staff_id: staffId, service_ids: [serviceId], start_time: start, hold_token: 'hold-token' }, userId)).rejects.toThrow('Mongo write failed');
     expect(calendars.findOneAndUpdate).toHaveBeenCalledTimes(1);

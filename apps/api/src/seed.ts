@@ -7,7 +7,7 @@ async function run() {
   await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/spa_salon');
   await redis.flushdb();
   const db = mongoose.connection.db!;
-  for (const name of ['users', 'branches', 'services', 'appointments', 'reviews', 'staffcalendars', 'tempslots']) {
+  for (const name of ['users', 'branches', 'services', 'appointments', 'reviews', 'staffcalendars', 'tempslots', 'adminaudits']) {
     await db.collection(name).deleteMany({});
   }
 

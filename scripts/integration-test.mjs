@@ -5,6 +5,7 @@ const base = process.env.API_URL || 'http://localhost:3001/api';
 const mongoUrl = process.env.MONGODB_URI || 'mongodb://localhost:27017/spa_salon';
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 let createdAppointment;
+const testStartedAt = new Date();
 const adminCreated = { branches: [], services: [], users: [] };
 
 async function request(path, options = {}, expected) {
@@ -32,6 +33,7 @@ async function cleanup() {
   if (adminCreated.users.length) await db.collection('users').deleteMany({ _id: { $in: adminCreated.users.map(id => new mongoose.Types.ObjectId(id)) } });
   if (adminCreated.services.length) await db.collection('services').deleteMany({ _id: { $in: adminCreated.services.map(id => new mongoose.Types.ObjectId(id)) } });
   if (adminCreated.branches.length) await db.collection('branches').deleteMany({ _id: { $in: adminCreated.branches.map(id => new mongoose.Types.ObjectId(id)) } });
+  await db.collection('adminaudits').deleteMany({ created_at: { $gte: testStartedAt } });
   await mongoose.disconnect();
 }
 
@@ -64,6 +66,7 @@ try {
   assert(workers.length && service, 'Thiếu dữ liệu danh mục để kiểm thử');
 
   const start = new Date(); start.setDate(start.getDate() + 10); start.setHours(16, 0, 0, 0);
+  while (start.getDay() === 0) start.setDate(start.getDate() + 1);
   const holdPayload = { branch_id: branches[0]._id, staff_id: workers[0]._id, service_ids: [service._id], start_time: start.toISOString() };
   const holds = await Promise.all([
     request('/slots/hold', { method: 'POST', headers: customerOne.headers, body: JSON.stringify(holdPayload) }),
@@ -81,12 +84,29 @@ try {
   const booking = await request('/appointments', { method: 'POST', headers: winner.headers, body: JSON.stringify({ ...holdPayload, hold_token: hold.hold_token, note: 'Kiểm thử tích hợp tự động' }) }, 201);
   createdAppointment = booking.data;
   assert(createdAppointment.services_booked[0].price === service.price, 'Snapshot giá dịch vụ không đúng');
+  const movedStart = new Date(start); movedStart.setDate(movedStart.getDate() + 1);
+  while (movedStart.getDay() === 0) movedStart.setDate(movedStart.getDate() + 1);
+  const movedPayload = { ...holdPayload, start_time: movedStart.toISOString() };
+  const movedHold = (await request(`/appointments/${createdAppointment._id}/reschedule/hold`, { method: 'POST', headers: winner.headers, body: JSON.stringify(movedPayload) }, 201)).data;
+  createdAppointment = (await request(`/appointments/${createdAppointment._id}/reschedule`, { method: 'PATCH', headers: winner.headers, body: JSON.stringify({ ...movedPayload, hold_token: movedHold.hold_token, reason: 'Kiểm thử đổi lịch' }) }, 200)).data;
+  assert(new Date(createdAppointment.time_slot.start_time).getTime() === movedStart.getTime(), 'Thời gian sau đổi lịch không đúng');
+  assert(createdAppointment.reschedule_history?.length === 1, 'Lịch sử đổi lịch chưa được lưu');
   const loserAppointments = (await request('/appointments/mine', { headers: loser.headers }, 200)).data;
   assert(!loserAppointments.some(item => item._id === createdAppointment._id), 'Khách khác nhìn thấy lịch không thuộc mình');
   await request('/reports/dashboard', { headers: winner.headers }, 403);
 
-  await request(`/appointments/${createdAppointment._id}/status`, { method: 'PATCH', headers: staffUser.headers, body: JSON.stringify({ status: 'IN_PROGRESS' }) }, 200);
-  await request(`/appointments/${createdAppointment._id}/status`, { method: 'PATCH', headers: staffUser.headers, body: JSON.stringify({ status: 'COMPLETED' }) }, 200);
+  await request(`/appointments/${createdAppointment._id}/status`, { method: 'PATCH', headers: admin.headers, body: JSON.stringify({ status: 'CHECKED_IN' }) }, 409);
+  const operationalStart = new Date(Date.now() - 5 * 60_000);
+  const operationalEnd = new Date(operationalStart.getTime() + 45 * 60_000);
+  await mongoose.connect(mongoUrl);
+  await mongoose.connection.db.collection('appointments').updateOne(
+    { _id: new mongoose.Types.ObjectId(createdAppointment._id) },
+    { $set: { 'time_slot.start_time': operationalStart, 'time_slot.end_time': operationalEnd } }
+  );
+  await mongoose.disconnect();
+  await request(`/appointments/${createdAppointment._id}/status`, { method: 'PATCH', headers: admin.headers, body: JSON.stringify({ status: 'CHECKED_IN' }) }, 200);
+  await request(`/appointments/${createdAppointment._id}/status`, { method: 'PATCH', headers: admin.headers, body: JSON.stringify({ status: 'IN_PROGRESS' }) }, 200);
+  await request(`/appointments/${createdAppointment._id}/status`, { method: 'PATCH', headers: admin.headers, body: JSON.stringify({ status: 'COMPLETED' }) }, 200);
   await request('/reviews', { method: 'POST', headers: winner.headers, body: JSON.stringify({ appointment_id: createdAppointment._id, rating: 5, comment: 'Kiểm thử tự động' }) }, 201);
   const report = (await request('/reports/dashboard', { headers: admin.headers }, 200)).data;
   assert(report.totals && Array.isArray(report.top_services) && Array.isArray(report.staff_performance), 'Báo cáo tổng hợp không đầy đủ');
@@ -108,12 +128,15 @@ try {
   const archivedService = (await request(`/admin/services/${createdService._id}`, { method: 'DELETE', headers: admin.headers }, 200)).data;
   const archivedBranch = (await request(`/admin/branches/${createdBranch._id}`, { method: 'DELETE', headers: admin.headers }, 200)).data;
   assert(archivedStaff.status === 'INACTIVE' && archivedService.status === 'INACTIVE' && archivedBranch.status === 'INACTIVE', 'Chức năng ngừng hoạt động chưa đúng');
+  const auditEntries = (await request('/admin/audit?limit=100', { headers: admin.headers }, 200)).data;
+  assert(auditEntries.some(item => item.action === 'CREATE') && auditEntries.some(item => item.action === 'UPDATE') && auditEntries.some(item => item.action === 'ARCHIVE'), 'Nhật ký quản trị chưa ghi đủ hành động');
+  assert(auditEntries.every(item => !JSON.stringify(item).includes('password_hash')), 'Nhật ký quản trị làm lộ password_hash');
 
   await request('/branches', {}, 200);
   const ttl = await cacheClient.ttl('cache:branches');
   await cacheClient.quit();
   assert(ttl > 0 && ttl <= 300, `TTL cache không hợp lệ: ${ttl}`);
-  console.log(JSON.stringify({ passed: true, registration: 'passed', geo_near: 'passed', staff_schedule_filter: 'passed', jwt_missing_and_tampered: 'rejected', concurrent_hold: '1 success + 1 conflict', hold_mismatch: 'rejected', authorization: 'passed', snapshot: 'passed', workflow: 'completed + reviewed', cache_miss_and_hit: 'passed', cache_ttl: ttl, report: 'passed', admin_crud: 'create + update + archive passed' }, null, 2));
+  console.log(JSON.stringify({ passed: true, registration: 'passed', geo_near: 'passed', staff_schedule_filter: 'passed', jwt_missing_and_tampered: 'rejected', concurrent_hold: '1 success + 1 conflict', hold_mismatch: 'rejected', reschedule: 'hold new + preserve history passed', early_admin_action: 'rejected', authorization: 'passed', snapshot: 'passed', workflow: 'completed + reviewed', cache_miss_and_hit: 'passed', cache_ttl: ttl, report: 'passed', admin_crud: 'create + update + archive passed', admin_audit: 'actor + before/after + password scrub passed' }, null, 2));
 } finally {
   await cleanup();
 }

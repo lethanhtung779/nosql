@@ -1,10 +1,12 @@
-export const ACTIVE_APPOINTMENT_STATUSES = ['CONFIRMED', 'IN_PROGRESS'] as const;
+export const ACTIVE_APPOINTMENT_STATUSES = ['CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS'] as const;
 
 export const STATUS_TRANSITIONS: Record<string, string[]> = {
-  CONFIRMED: ['IN_PROGRESS', 'CANCELLED'],
+  CONFIRMED: ['CHECKED_IN', 'NO_SHOW', 'CANCELLED'],
+  CHECKED_IN: ['IN_PROGRESS', 'CANCELLED'],
   IN_PROGRESS: ['COMPLETED'],
   COMPLETED: [],
-  CANCELLED: []
+  CANCELLED: [],
+  NO_SHOW: []
 };
 
 export function overlaps(existingStart: Date, existingEnd: Date, newStart: Date, newEnd: Date) {

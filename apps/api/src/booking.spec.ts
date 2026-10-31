@@ -7,8 +7,10 @@ describe('Quy tắc đặt lịch', () => {
   it('cho phép hai khoảng nối tiếp', () => {
     expect(overlaps(new Date(1), new Date(5), new Date(5), new Date(7))).toBe(false);
   });
-  it('cho phép bắt đầu phục vụ từ lịch đã xác nhận', () => {
-    expect(canTransition('CONFIRMED', 'IN_PROGRESS')).toBe(true);
+  it('yêu cầu check-in trước khi bắt đầu phục vụ', () => {
+    expect(canTransition('CONFIRMED', 'IN_PROGRESS')).toBe(false);
+    expect(canTransition('CONFIRMED', 'CHECKED_IN')).toBe(true);
+    expect(canTransition('CHECKED_IN', 'IN_PROGRESS')).toBe(true);
   });
   it('không cho phép hoàn thành trực tiếp từ lịch xác nhận', () => {
     expect(canTransition('CONFIRMED', 'COMPLETED')).toBe(false);
@@ -30,5 +32,8 @@ describe('Quy tắc đặt lịch', () => {
   });
   it('không cho phép hủy khi đang phục vụ', () => {
     expect(canTransition('IN_PROGRESS', 'CANCELLED')).toBe(false);
+  });
+  it('cho phép đánh dấu khách vắng từ lịch đã xác nhận', () => {
+    expect(canTransition('CONFIRMED', 'NO_SHOW')).toBe(true);
   });
 });

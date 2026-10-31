@@ -3,7 +3,7 @@ import Redis from 'ioredis';
 
 export type SlotHold = {
   token: string; userId: string; staffId: string; branchId: string;
-  serviceIds: string[]; startTime: string; endTime: string;
+  serviceIds: string[]; startTime: string; endTime: string; appointmentId?: string;
 };
 
 @Injectable()
@@ -60,6 +60,16 @@ export class RedisService implements OnModuleDestroy {
   async releaseHold(hold: SlotHold) {
     const day = hold.startTime.slice(0, 10);
     await this.client.multi().del(`slot-hold:${hold.token}`).zrem(`slot-index:${hold.staffId}:${day}`, hold.token).exec();
+  }
+
+  async listActiveHolds(staffId: string, date: string): Promise<SlotHold[]> {
+    const indexKey = `slot-index:${staffId}:${date}`;
+    const tokens = await this.client.zrange(indexKey, 0, -1);
+    if (!tokens.length) return [];
+    const values = await this.client.mget(tokens.map(token => `slot-hold:${token}`));
+    const expired = tokens.filter((_, index) => !values[index]);
+    if (expired.length) await this.client.zrem(indexKey, ...expired);
+    return values.filter(Boolean).map(value => JSON.parse(value!));
   }
 
 

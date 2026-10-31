@@ -4,7 +4,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import {
-  ArrayMinSize, IsArray, IsDateString, IsIn, IsInt, IsMongoId,
+  ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsMongoId,
   IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, Min, MinLength
 } from 'class-validator';
 import { SpaService } from './spa.service';
@@ -21,7 +21,11 @@ class BookDto extends HoldDto {
   @IsUUID() hold_token!: string;
   @IsOptional() @IsString() note?: string;
 }
-class StatusDto { @IsIn(['CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']) status!: string; }
+class RescheduleDto extends BookDto { @IsOptional() @IsString() reason?: string; }
+class StatusDto {
+  @IsIn(['CHECKED_IN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW']) status!: string;
+  @IsOptional() @IsString() reason?: string;
+}
 class UserStatusDto { @IsIn(['ACTIVE', 'INACTIVE']) status!: string; }
 class ReviewDto {
   @IsMongoId() appointment_id!: string;
@@ -52,6 +56,7 @@ class ServiceDto {
   @IsOptional() @IsString() description?: string;
   @IsNumber() @Min(0) price!: number;
   @IsInt() @Min(5) duration_minutes!: number;
+  @IsOptional() @IsBoolean() is_estimated?: boolean;
   @IsArray() @ArrayMinSize(1) @IsMongoId({ each: true }) branch_ids!: string[];
   @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: string;
 }
@@ -61,6 +66,7 @@ class ServiceUpdateDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsNumber() @Min(0) price?: number;
   @IsOptional() @IsInt() @Min(5) duration_minutes?: number;
+  @IsOptional() @IsBoolean() is_estimated?: boolean;
   @IsOptional() @IsArray() @ArrayMinSize(1) @IsMongoId({ each: true }) branch_ids?: string[];
   @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: string;
 }
@@ -70,6 +76,12 @@ class StaffDto {
   @MinLength(6) password!: string;
   @IsMongoId() branch_id!: string;
   @IsNotEmpty() specialty!: string;
+  @IsOptional() @IsArray() @IsInt({ each: true }) @Min(0, { each: true }) @Max(6, { each: true }) working_days?: number[];
+  @IsOptional() @IsString() work_open?: string;
+  @IsOptional() @IsString() work_close?: string;
+  @IsOptional() @IsString() break_start?: string;
+  @IsOptional() @IsString() break_end?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) days_off?: string[];
 }
 class StaffUpdateDto {
   @IsOptional() @IsNotEmpty() name?: string;
@@ -77,6 +89,22 @@ class StaffUpdateDto {
   @IsOptional() @MinLength(6) password?: string;
   @IsOptional() @IsMongoId() branch_id?: string;
   @IsOptional() @IsNotEmpty() specialty?: string;
+  @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: string;
+  @IsOptional() @IsArray() @IsInt({ each: true }) @Min(0, { each: true }) @Max(6, { each: true }) working_days?: number[];
+  @IsOptional() @IsString() work_open?: string;
+  @IsOptional() @IsString() work_close?: string;
+  @IsOptional() @IsString() break_start?: string;
+  @IsOptional() @IsString() break_end?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) days_off?: string[];
+}
+class CategoryDto {
+  @IsNotEmpty() name!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: string;
+}
+class CategoryUpdateDto {
+  @IsOptional() @IsNotEmpty() name?: string;
+  @IsOptional() @IsString() description?: string;
   @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: string;
 }
 
@@ -99,8 +127,12 @@ export class CatalogController {
   @Get('branches') branches(@Query('longitude') lng?: string, @Query('latitude') lat?: string) {
     return this.spa.listBranches(Number(lng), Number(lat));
   }
+  @Get('categories') categories() { return this.spa.listCategories(false); }
   @Get('services') services(@Query('branch_id') id?: string) { return this.spa.listServices(id); }
   @Get('staff') staff(@Query('branch_id') id?: string) { return this.spa.listStaff(id); }
+  @Get('availability') availability(@Query('branch_id') branchId: string, @Query('staff_id') staffId: string, @Query('service_ids') serviceIds: string, @Query('date') date: string) {
+    return this.spa.getAvailability(branchId, staffId, String(serviceIds || '').split(',').filter(Boolean), date);
+  }
 }
 
 @ApiTags('slot holds')
@@ -125,9 +157,15 @@ export class AppointmentController {
   @Get('mine') mine(@Req() req: any, @Query('from') from?: string, @Query('to') to?: string) {
     return this.spa.listAppointments(req.user, from, to);
   }
+  @Post(':id/reschedule/hold') @Roles('CUSTOMER') rescheduleHold(@Param('id') id: string, @Body() dto: HoldDto, @Req() req: any) {
+    return this.spa.holdRescheduleSlot(id, dto, req.user.sub);
+  }
+  @Patch(':id/reschedule') @Roles('CUSTOMER') reschedule(@Param('id') id: string, @Body() dto: RescheduleDto, @Req() req: any) {
+    return this.spa.rescheduleAppointment(id, dto, req.user.sub, dto.reason);
+  }
   @Get(':id') get(@Param('id') id: string, @Req() req: any) { return this.spa.getAppointment(id, req.user); }
   @Patch(':id/status') @Roles('STAFF', 'ADMIN') status(@Param('id') id: string, @Body() dto: StatusDto, @Req() req: any) {
-    return this.spa.setStatus(id, dto.status, req.user);
+    return this.spa.setStatus(id, dto.status, req.user, dto.reason);
   }
   @Patch(':id/cancel') @Roles('CUSTOMER') cancel(@Param('id') id: string, @Req() req: any) {
     return this.spa.cancelAppointment(id, req.user.sub);
@@ -161,23 +199,37 @@ export class ReportController {
 export class AdminController {
   constructor(private spa: SpaService) {}
   @Get('users') users() { return this.spa.listAdminUsers(); }
-  @Post('branches') createBranch(@Body() dto: BranchDto) {
-    return this.spa.createBranch({ name: dto.name, address: dto.address, phone: dto.phone, location: { type: 'Point', coordinates: dto.coordinates }, opening_hours: { open: dto.open, close: dto.close }, status: dto.status });
+  @Get('branches') branches() { return this.spa.listAdminBranches(); }
+  @Get('services') services() { return this.spa.listAdminServices(); }
+  @Get('categories') categories() { return this.spa.listCategories(true); }
+  @Get('audit') audit(@Query('entity_type') entityType?: string, @Query('action') action?: string, @Query('limit') limit?: string) { return this.spa.listAudit(entityType, action, Number(limit) || 100); }
+  @Post('categories') createCategory(@Body() dto: CategoryDto, @Req() req: any) { return this.spa.createCategory(dto, req.user); }
+  @Patch('categories/:id') updateCategory(@Param('id') id: string, @Body() dto: CategoryUpdateDto, @Req() req: any) { return this.spa.updateCategory(id, dto, req.user); }
+  @Delete('categories/:id') deleteCategory(@Param('id') id: string, @Req() req: any) { return this.spa.archiveCategory(id, req.user); }
+  @Post('branches') createBranch(@Body() dto: BranchDto, @Req() req: any) {
+    return this.spa.createBranch({ name: dto.name, address: dto.address, phone: dto.phone, location: { type: 'Point', coordinates: dto.coordinates }, opening_hours: { open: dto.open, close: dto.close }, status: dto.status }, req.user);
   }
-  @Patch('branches/:id') updateBranch(@Param('id') id: string, @Body() dto: BranchUpdateDto) {
+  @Patch('branches/:id') updateBranch(@Param('id') id: string, @Body() dto: BranchUpdateDto, @Req() req: any) {
     const update: any = { ...dto };
     if (dto.coordinates) { update.location = { type: 'Point', coordinates: dto.coordinates }; delete update.coordinates; }
     if (dto.open || dto.close) { update.opening_hours = { open: dto.open, close: dto.close }; delete update.open; delete update.close; }
-    return this.spa.updateBranch(id, update);
+    return this.spa.updateBranch(id, update, req.user);
   }
-  @Delete('branches/:id') deleteBranch(@Param('id') id: string) { return this.spa.archiveBranch(id); }
-  @Post('services') createService(@Body() dto: ServiceDto) { return this.spa.createService(dto); }
-  @Patch('services/:id') updateService(@Param('id') id: string, @Body() dto: ServiceUpdateDto) { return this.spa.updateService(id, dto); }
-  @Delete('services/:id') deleteService(@Param('id') id: string) { return this.spa.archiveService(id); }
-  @Post('staff') createStaff(@Body() dto: StaffDto) { return this.spa.createStaff(dto); }
-  @Patch('staff/:id') updateStaff(@Param('id') id: string, @Body() dto: StaffUpdateDto) { return this.spa.updateStaff(id, dto); }
-  @Delete('staff/:id') deleteStaff(@Param('id') id: string) { return this.spa.archiveStaff(id); }
-  @Patch('users/:id/status') updateUserStatus(@Param('id') id: string, @Body() dto: UserStatusDto) {
-    return this.spa.updateUserStatus(id, dto.status);
+  @Delete('branches/:id') deleteBranch(@Param('id') id: string, @Req() req: any) { return this.spa.archiveBranch(id, req.user); }
+  @Post('services') createService(@Body() dto: ServiceDto, @Req() req: any) { return this.spa.createService(dto, req.user); }
+  @Patch('services/:id') updateService(@Param('id') id: string, @Body() dto: ServiceUpdateDto, @Req() req: any) { return this.spa.updateService(id, dto, req.user); }
+  @Delete('services/:id') deleteService(@Param('id') id: string, @Req() req: any) { return this.spa.archiveService(id, req.user); }
+  @Post('staff') createStaff(@Body() dto: StaffDto, @Req() req: any) { return this.spa.createStaff(this.mapStaffSchedule(dto), req.user); }
+  @Patch('staff/:id') updateStaff(@Param('id') id: string, @Body() dto: StaffUpdateDto, @Req() req: any) { return this.spa.updateStaff(id, this.mapStaffSchedule(dto), req.user); }
+  @Delete('staff/:id') deleteStaff(@Param('id') id: string, @Req() req: any) { return this.spa.archiveStaff(id, req.user); }
+  @Patch('users/:id/status') updateUserStatus(@Param('id') id: string, @Body() dto: UserStatusDto, @Req() req: any) {
+    return this.spa.updateUserStatus(id, dto.status, req.user);
+  }
+  private mapStaffSchedule(dto: StaffDto | StaffUpdateDto) {
+    const value: any = { ...dto };
+    if (dto.work_open !== undefined || dto.work_close !== undefined) value.working_hours = { open: dto.work_open, close: dto.work_close };
+    if (dto.break_start !== undefined || dto.break_end !== undefined) value.break_hours = { start: dto.break_start, end: dto.break_end };
+    delete value.work_open; delete value.work_close; delete value.break_start; delete value.break_end;
+    return value;
   }
 }

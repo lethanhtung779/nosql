@@ -1,5 +1,5 @@
 {
-  "name": "spa-salon-nosql",
+  "name": "nexasalon-platform",
   "version": "2.0.0",
   "private": true,
   "workspaces": ["apps/*"],
@@ -8,7 +8,10 @@
     "build": "npm run build -w @spa/api && npm run build -w @spa/web",
     "start": "concurrently -n API,WEB \"npm run start:prod -w @spa/api\" \"npm run start -w @spa/web\"",
     "seed": "npm run seed -w @spa/api",
-    "test": "npm run test -w @spa/api"
+    "test": "npm run test -w @spa/api",
+    "test:integration": "node scripts/integration-test.mjs",
+    "test:all": "npm test && npm run test:integration",
+    "db:explain": "node scripts/explain-index.mjs"
   },
   "devDependencies": { "concurrently": "^9.1.2" }
 }

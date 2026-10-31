@@ -50,8 +50,22 @@ export class RedisService implements OnModuleDestroy {
     return raw ? JSON.parse(raw) : null;
   }
 
+  async getHoldStatus(token: string) {
+    const hold = await this.getHold(token);
+    if (!hold) return null;
+    const ttl = await this.client.ttl(`slot-hold:${token}`);
+    return { ...hold, expires_in_seconds: Math.max(ttl, 0) };
+  }
+
   async releaseHold(hold: SlotHold) {
     const day = hold.startTime.slice(0, 10);
     await this.client.multi().del(`slot-hold:${hold.token}`).zrem(`slot-index:${hold.staffId}:${day}`, hold.token).exec();
+  }
+
+
+  async invalidateCatalog() {
+    const keys = await this.client.keys('cache:services:*');
+    const all = ['cache:branches', ...keys];
+    if (all.length) await this.client.del(...all);
   }
 }

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Redis from 'ioredis';
 import * as bcrypt from 'bcryptjs';
+import { Neo4jService } from './neo4j.service';
 
 async function run() {
   const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
@@ -45,7 +46,18 @@ async function run() {
   await db.collection('staffcalendars').insertOne({ staff_id: stylist, date_key: upcomingStart.toISOString().slice(0, 10), slots: [{ appointment_code: 'BK-DEMO-UPCOMING', start_time: upcomingStart, end_time: upcomingEnd, status: 'CONFIRMED' }] });
   await db.collection('reviews').insertOne({ appointment_id: appointmentResult.insertedIds[0], customer_id: customerOne, staff_id: stylist, rating: 5, comment: 'Dịch vụ chu đáo và đúng giờ.', images: [], created_at: completedEnd, updated_at: completedEnd });
 
-  console.log('Seed NexaSalon hoàn tất: 5 tài khoản, 2 chi nhánh, 4 dịch vụ và dữ liệu báo cáo mẫu.');
+  const neo4j = new Neo4jService();
+  const completedAppointments = await db.collection('appointments').find({ status: 'COMPLETED' }).toArray();
+  const serviceList = await db.collection('services').find().toArray();
+  const categoryMap = new Map(serviceList.map(service => [String(service._id), service.category]));
+  await neo4j.rebuild(completedAppointments.map(appointment => ({
+    ...appointment,
+    completed_at: appointment.time_slot.end_time,
+    services_booked: appointment.services_booked.map((service: any) => ({ ...service, category: categoryMap.get(String(service.service_id)) }))
+  })));
+  await neo4j.onModuleDestroy();
+
+  console.log('Seed NexaSalon hoàn tất: MongoDB, Redis và đồ thị phân khúc Neo4j đã sẵn sàng.');
   await redis.quit();
   await mongoose.disconnect();
 }

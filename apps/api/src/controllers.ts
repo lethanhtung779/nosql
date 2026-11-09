@@ -10,6 +10,7 @@ import {
 import { SpaService } from './spa.service';
 import { Roles, RolesGuard } from './roles';
 import { RedisService } from './redis.service';
+import { Neo4jService } from './neo4j.service';
 
 class HoldDto {
   @IsMongoId() branch_id!: string;
@@ -110,11 +111,11 @@ class CategoryUpdateDto {
 
 @Controller('health')
 export class HealthController {
-  constructor(private redis: RedisService) {}
+  constructor(private redis: RedisService, private neo4j: Neo4jService) {}
   @Get() async health() {
     return {
       status: 'ok', framework: 'NestJS',
-      databases: { mongodb: 'connected', redis: (await this.redis.ping()) === 'PONG' ? 'connected' : 'error' },
+      databases: { mongodb: 'connected', redis: (await this.redis.ping()) === 'PONG' ? 'connected' : 'error', neo4j: (await this.neo4j.ping()) ? 'connected' : 'error' },
       time: new Date()
     };
   }
@@ -203,6 +204,8 @@ export class AdminController {
   @Get('services') services() { return this.spa.listAdminServices(); }
   @Get('categories') categories() { return this.spa.listCategories(true); }
   @Get('audit') audit(@Query('entity_type') entityType?: string, @Query('action') action?: string, @Query('limit') limit?: string) { return this.spa.listAudit(entityType, action, Number(limit) || 100); }
+  @Get('customer-segments') customerSegments() { return this.spa.customerSegments(); }
+  @Post('customer-segments/rebuild') rebuildCustomerSegments() { return this.spa.rebuildCustomerSegments(); }
   @Post('categories') createCategory(@Body() dto: CategoryDto, @Req() req: any) { return this.spa.createCategory(dto, req.user); }
   @Patch('categories/:id') updateCategory(@Param('id') id: string, @Body() dto: CategoryUpdateDto, @Req() req: any) { return this.spa.updateCategory(id, dto, req.user); }
   @Delete('categories/:id') deleteCategory(@Param('id') id: string, @Req() req: any) { return this.spa.archiveCategory(id, req.user); }

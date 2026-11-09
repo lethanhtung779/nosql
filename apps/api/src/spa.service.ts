@@ -7,6 +7,7 @@ import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
 import { RedisService, SlotHold } from './redis.service';
 import { ACTIVE_APPOINTMENT_STATUSES, canTransition } from './booking-rules';
+import { Neo4jService } from './neo4j.service';
 
 @Injectable()
 export class SpaService {
@@ -19,7 +20,8 @@ export class SpaService {
     @InjectModel('StaffCalendar') private calendars: Model<any>,
     @InjectModel('Category') private categories: Model<any>,
     private redis: RedisService,
-    @InjectModel('AdminAudit') private audits: Model<any>
+    @InjectModel('AdminAudit') private audits: Model<any>,
+    private neo4j: Neo4jService
   ) {}
 
   private auditValue(value: any) {
@@ -362,7 +364,7 @@ export class SpaService {
         staff: { staff_id: staff._id, name: staff.name },
         time_slot: { start_time: start, end_time: end },
         services_booked: services.map(service => ({
-          service_id: service._id, name: service.name,
+          service_id: service._id, name: service.name, category: service.category,
           price: service.price, duration: service.duration_minutes
         })),
         total_amount: services.reduce((sum, service) => sum + service.price, 0),
@@ -465,6 +467,7 @@ export class SpaService {
     if (!updated) throw new ConflictException('Lịch hẹn vừa được cập nhật ở nơi khác, vui lòng tải lại');
     await this.syncCalendarStatus(updated, status);
     if (user.role === 'ADMIN') await this.writeAudit(user, 'STATUS_CHANGE', 'APPOINTMENT', updated._id, current, updated);
+    if (status === 'COMPLETED') await this.neo4j.syncAppointment(updated).catch(() => undefined);
     return updated;
   }
 
@@ -552,6 +555,20 @@ export class SpaService {
       top_services: topServices,
       staff_performance: staffPerformance
     };
+  }
+
+  customerSegments() { return this.neo4j.classifyCustomers(); }
+
+  async rebuildCustomerSegments() {
+    const appointments = await this.appointments.find({ status: 'COMPLETED' }).lean();
+    const serviceIds = appointments.flatMap((appointment: any) => appointment.services_booked.map((item: any) => item.service_id));
+    const services = await this.services.find({ _id: { $in: serviceIds } }).select('category').lean();
+    const categories = new Map(services.map((service: any) => [String(service._id), service.category]));
+    const enriched = appointments.map((appointment: any) => ({
+      ...appointment,
+      services_booked: appointment.services_booked.map((item: any) => ({ ...item, category: item.category || categories.get(String(item.service_id)) || 'Chưa phân loại' }))
+    }));
+    return this.neo4j.rebuild(enriched);
   }
 
   listAdminUsers() { return this.users.find().select('-password_hash').sort({ role: 1, name: 1 }); }

@@ -5,6 +5,7 @@ const base = process.env.API_URL || 'http://localhost:3001/api';
 const mongoUrl = process.env.MONGODB_URI || 'mongodb://localhost:27017/spa_salon';
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 let createdAppointment;
+let adminAuthHeaders;
 const testStartedAt = new Date();
 const adminCreated = { branches: [], services: [], users: [] };
 
@@ -35,12 +36,16 @@ async function cleanup() {
   if (adminCreated.branches.length) await db.collection('branches').deleteMany({ _id: { $in: adminCreated.branches.map(id => new mongoose.Types.ObjectId(id)) } });
   await db.collection('adminaudits').deleteMany({ created_at: { $gte: testStartedAt } });
   await mongoose.disconnect();
+  if (adminAuthHeaders) {
+    await request('/admin/customer-segments/rebuild', { method: 'POST', headers: adminAuthHeaders }, 201).catch(() => undefined);
+  }
 }
 
 try {
   const [customerOne, customerTwo, staffUser, admin] = await Promise.all([
     login('0900000004'), login('0900000005'), login('0900000002'), login('0900000001')
   ]);
+  adminAuthHeaders = admin.headers;
   await request('/appointments/mine', {}, 401);
   await request('/appointments/mine', { headers: { Authorization: `Bearer ${customerOne.token}tampered` } }, 401);
   const filterFrom = new Date(); filterFrom.setHours(0, 0, 0, 0);
@@ -110,6 +115,9 @@ try {
   await request('/reviews', { method: 'POST', headers: winner.headers, body: JSON.stringify({ appointment_id: createdAppointment._id, rating: 5, comment: 'Kiểm thử tự động' }) }, 201);
   const report = (await request('/reports/dashboard', { headers: admin.headers }, 200)).data;
   assert(report.totals && Array.isArray(report.top_services) && Array.isArray(report.staff_performance), 'Báo cáo tổng hợp không đầy đủ');
+  await request('/admin/customer-segments', { headers: winner.headers }, 403);
+  const graphSegments = (await request('/admin/customer-segments/rebuild', { method: 'POST', headers: admin.headers }, 201)).data;
+  assert(Array.isArray(graphSegments) && graphSegments.some(item => Array.isArray(item.segments)), 'Neo4j không trả dữ liệu phân khúc');
 
   const suffix = String(Date.now()).slice(-7);
   const createdBranch = (await request('/admin/branches', { method: 'POST', headers: admin.headers, body: JSON.stringify({ name: 'Chi nhánh kiểm thử', address: 'Địa chỉ kiểm thử', phone: `028${suffix}`, coordinates: [106.7, 10.8], open: '09:00', close: '20:00' }) }, 201)).data;
@@ -136,7 +144,7 @@ try {
   const ttl = await cacheClient.ttl('cache:branches');
   await cacheClient.quit();
   assert(ttl > 0 && ttl <= 300, `TTL cache không hợp lệ: ${ttl}`);
-  console.log(JSON.stringify({ passed: true, registration: 'passed', geo_near: 'passed', staff_schedule_filter: 'passed', jwt_missing_and_tampered: 'rejected', concurrent_hold: '1 success + 1 conflict', hold_mismatch: 'rejected', reschedule: 'hold new + preserve history passed', early_admin_action: 'rejected', authorization: 'passed', snapshot: 'passed', workflow: 'completed + reviewed', cache_miss_and_hit: 'passed', cache_ttl: ttl, report: 'passed', admin_crud: 'create + update + archive passed', admin_audit: 'actor + before/after + password scrub passed' }, null, 2));
+  console.log(JSON.stringify({ passed: true, registration: 'passed', geo_near: 'passed', staff_schedule_filter: 'passed', jwt_missing_and_tampered: 'rejected', concurrent_hold: '1 success + 1 conflict', hold_mismatch: 'rejected', reschedule: 'hold new + preserve history passed', early_admin_action: 'rejected', authorization: 'passed', snapshot: 'passed', workflow: 'completed + reviewed', cache_miss_and_hit: 'passed', cache_ttl: ttl, report: 'passed', neo4j_segments: 'rebuild + authorization passed', admin_crud: 'create + update + archive passed', admin_audit: 'actor + before/after + password scrub passed' }, null, 2));
 } finally {
   await cleanup();
 }

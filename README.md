@@ -6,6 +6,7 @@
 - `apps/web`: Next.js App Router và React.
 - MongoDB là CSDL chính, lưu dữ liệu nghiệp vụ lâu dài.
 - Redis là CSDL thứ hai, giữ slot TTL 15 phút và cache dữ liệu danh mục.
+- Neo4j là CSDL đồ thị, liên kết khách hàng với lịch hẹn, dịch vụ, chi nhánh, nhân viên và phân khúc khách hàng.
 
 ## Chạy dự án
 
@@ -29,6 +30,7 @@ npm run dev
 - Website: http://localhost:3000
 - API: http://localhost:3001/api
 - Swagger: http://localhost:3001/api/docs
+- Neo4j Browser: http://localhost:7474 (`neo4j` / `nexasalon-graph`)
 
 ## Tài khoản mẫu
 
@@ -55,6 +57,7 @@ Tất cả dùng mật khẩu `123456`.
 - Nhân viên cập nhật trạng thái theo đúng luồng nghiệp vụ.
 - Quản trị viên quản lý chi nhánh, dịch vụ, nhân viên và khóa/mở tài khoản.
 - Aggregation Pipeline báo cáo doanh thu, trạng thái lịch, top dịch vụ và hiệu suất nhân viên.
+- Neo4j phân loại khách mới, thường xuyên, trung thành, VIP, nguy cơ rời bỏ và nhóm dịch vụ yêu thích.
 
 ## API chính
 
@@ -79,12 +82,13 @@ npm run db:explain
 
 `test:integration` kiểm tra đồng thời hai khách giữ cùng khung giờ, phân quyền, snapshot, quy trình phục vụ, đánh giá, cache và báo cáo. Script tự dọn dữ liệu kiểm thử sau khi hoàn tất.
 
-## Hai hệ CSDL NoSQL
+## Ba hệ CSDL NoSQL
 
 | CSDL | Vai trò |
 |---|---|
 | MongoDB | Users, branches, services, appointments, reviews, GeoJSON và Aggregation Pipeline |
 | Redis | Slot hold TTL, distributed lock và cache catalog |
+| Neo4j | Đồ thị hành vi khách hàng, quan hệ dịch vụ và phân khúc khách hàng |
 
 Luồng đặt lịch: `POST /api/slots/hold` tạo khóa Redis trong 15 phút, sau đó `POST /api/appointments` dùng `hold_token` để xác nhận và ghi MongoDB.
 

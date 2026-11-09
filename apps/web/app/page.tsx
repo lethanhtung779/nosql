@@ -13,6 +13,7 @@ type Item = {
 
 type AvailableSlot = { start_time: string; end_time: string; label: string };
 type AuditEntry = { _id: string; created_at: string; action: string; entity_type: string; entity_id: string; actor: { name: string; role: string }; before?: any; after?: any };
+type CustomerSegment = { user_id: string; name: string; phone: string; appointment_count: number; recent_count: number; total_spent: number; last_visit: string | null; segments: string[] };
 
 type Appointment = {
   _id: string; booking_code: string; branch_id: string; status: string; total_amount: number; note?: string;
@@ -106,6 +107,7 @@ export default function Home() {
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [reschedule, setReschedule] = useState<{ appointment: Appointment; staff: Item[]; staffId: string; date: string; time: string; slots: AvailableSlot[]; hold: any; reason: string; loading: boolean } | null>(null);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [customerSegments, setCustomerSegments] = useState<CustomerSegment[]>([]);
 
   const categoryOptions = useMemo(() => {
     if (categories.length > 0) {
@@ -361,13 +363,14 @@ export default function Home() {
 
   async function loadAdmin() {
     try {
-      const [dashboard, accountList, branchList, serviceList, categoryList, auditList] = await Promise.all([
+      const [dashboard, accountList, branchList, serviceList, categoryList, auditList, segmentList] = await Promise.all([
         api('/reports/dashboard'),
         api('/admin/users'),
         api('/admin/branches'),
         api('/admin/services'),
         api('/admin/categories').catch(() => []),
-        api('/admin/audit?limit=100').catch(() => [])
+        api('/admin/audit?limit=100').catch(() => []),
+        api('/admin/customer-segments').catch(() => [])
       ]);
       setReport(dashboard);
       setUsers(accountList);
@@ -377,6 +380,16 @@ export default function Home() {
         setCategories(categoryList);
       }
       if (Array.isArray(auditList)) setAuditLog(auditList);
+      if (Array.isArray(segmentList)) setCustomerSegments(segmentList);
+    } catch (error: any) { setMessage(error.message); }
+  }
+
+  async function rebuildSegments() {
+    try {
+      setMessage('Đang đồng bộ dữ liệu MongoDB sang Neo4j...');
+      const result = await api('/admin/customer-segments/rebuild', { method: 'POST' });
+      setCustomerSegments(result);
+      setMessage(`Đã phân loại ${result.length} khách hàng bằng Neo4j.`);
     } catch (error: any) { setMessage(error.message); }
   }
 
@@ -760,6 +773,11 @@ export default function Home() {
             <Chart title="Đánh giá chuyên viên" items={report.staff_performance} valueKey="average_rating" labelKey="staff_name" format={(value: number) => `${Number(value).toFixed(1)} / 5`}/>
           </div>
         </>}
+
+        {user.role === 'ADMIN' && <section className="segment-card">
+          <div className="segment-head"><div><p className="eyebrow">NEO4J · GRAPH DATABASE</p><h3>Phân khúc khách hàng</h3><p>Phân loại theo số lần đến, chi tiêu, lần quay lại gần nhất và nhóm dịch vụ yêu thích.</p></div><button onClick={rebuildSegments}>⟳ Đồng bộ & phân loại</button></div>
+          <div className="segment-list">{customerSegments.length ? customerSegments.map(customer => <article key={customer.user_id}><div><b>{customer.name}</b><small>{customer.phone} · {customer.appointment_count} lịch · {cash(customer.total_spent)}</small></div><div className="segment-tags">{customer.segments.map(segment => <span key={segment}>{segment}</span>)}</div><time>{customer.last_visit ? `Lần cuối: ${dateTime(customer.last_visit)}` : 'Chưa có lịch hoàn thành'}</time></article>) : <p className="empty compact">Chưa có dữ liệu đồ thị. Nhấn “Đồng bộ & phân loại” để tạo từ lịch đã hoàn thành.</p>}</div>
+        </section>}
 
         <div className="appointment-list">{visibleAppointments.length ? visibleAppointments.map(item => <article key={item._id}>
           <div><h3>{item.services_booked.map(service => service.name).join(' · ')}</h3><p>{dateTime(item.time_slot.start_time)} · {item.staff.name} · {cash(item.total_amount)}</p><small>{item.booking_code} · Khách: {item.customer.name}</small><details><summary>Xem chi tiết</summary><p>Điện thoại khách: {item.customer.phone}</p><p>Ghi chú: {item.note || 'Không có'}</p><p>Kết thúc dự kiến: {dateTime(item.time_slot.end_time)}</p>{item.checked_in_at && <p>Khách đến: {dateTime(item.checked_in_at)}</p>}{item.started_at && <p>Bắt đầu thực tế: {dateTime(item.started_at)}</p>}{item.completed_at && <p>Hoàn thành thực tế: {dateTime(item.completed_at)}</p>}{item.reschedule_history?.map((entry, index) => <p key={`${entry.at}-${index}`}><b>Lần đổi {index + 1}:</b> {dateTime(entry.from.start_time)} · {entry.from.staff_name} → {dateTime(entry.to.start_time)} · {entry.to.staff_name}{entry.reason ? ` · ${entry.reason}` : ''}</p>)}</details></div>

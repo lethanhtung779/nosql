@@ -21,7 +21,8 @@ describe('SpaService rollback', () => {
     const categories = { find: jest.fn(), exists: jest.fn() };
     const redis = { getHold: jest.fn().mockResolvedValue(hold), releaseHold: jest.fn() };
     const audits = { create: jest.fn() };
-    const spa = new SpaService(users as any, branches as any, services as any, appointments as any, reviews as any, calendars as any, categories as any, redis as any, audits as any);
+    const neo4j = { syncAppointment: jest.fn() };
+    const spa = new SpaService(users as any, branches as any, services as any, appointments as any, reviews as any, calendars as any, categories as any, redis as any, audits as any, neo4j as any);
 
     await expect(spa.book({ branch_id: branchId, staff_id: staffId, service_ids: [serviceId], start_time: start, hold_token: 'hold-token' }, userId)).rejects.toThrow('Mongo write failed');
     expect(calendars.findOneAndUpdate).toHaveBeenCalledTimes(1);

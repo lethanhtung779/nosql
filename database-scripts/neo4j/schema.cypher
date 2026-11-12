@@ -1,0 +1,18 @@
+CREATE CONSTRAINT customer_id IF NOT EXISTS
+FOR (c:Customer) REQUIRE c.user_id IS UNIQUE;
+
+CREATE CONSTRAINT appointment_id IF NOT EXISTS
+FOR (a:Appointment) REQUIRE a.appointment_id IS UNIQUE;
+
+CREATE CONSTRAINT service_id IF NOT EXISTS
+FOR (s:Service) REQUIRE s.service_id IS UNIQUE;
+
+CREATE CONSTRAINT branch_id IF NOT EXISTS
+FOR (b:Branch) REQUIRE b.branch_id IS UNIQUE;
+
+CREATE CONSTRAINT staff_id IF NOT EXISTS
+FOR (s:Staff) REQUIRE s.staff_id IS UNIQUE;
+
+CREATE CONSTRAINT segment_name IF NOT EXISTS
+FOR (s:Segment) REQUIRE s.name IS UNIQUE;
+

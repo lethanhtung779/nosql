@@ -252,6 +252,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!message) return;
+    const timeout = window.setTimeout(() => {
+      setMessage(current => current === message ? '' : current);
+    }, 4_000);
+    return () => window.clearTimeout(timeout);
+  }, [message]);
+
+  useEffect(() => {
     const root = document.documentElement;
     let frame = 0;
     const updatePointer = (event: PointerEvent) => {

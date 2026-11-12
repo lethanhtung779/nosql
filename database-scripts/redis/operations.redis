@@ -1,0 +1,26 @@
+# Các lệnh tham khảo cho RedisInsight CLI. Thay nội dung trong <...> trước khi chạy.
+
+# Kiểm tra kết nối
+PING
+
+# Cache danh mục trong 5 phút
+SET cache:branches '<JSON_ARRAY>' EX 300
+GET cache:branches
+TTL cache:branches
+
+# Xem các key cache dịch vụ
+SCAN 0 MATCH cache:services:* COUNT 100
+
+# Xem một slot hold và thời gian còn lại
+GET slot-hold:<TOKEN>
+TTL slot-hold:<TOKEN>
+
+# Liệt kê token theo chuyên viên và ngày
+ZRANGE slot-index:<STAFF_ID>:<YYYY-MM-DD> 0 -1 WITHSCORES
+
+# Giải phóng hold (API thực hiện hai lệnh này trong MULTI/EXEC)
+MULTI
+DEL slot-hold:<TOKEN>
+ZREM slot-index:<STAFF_ID>:<YYYY-MM-DD> <TOKEN>
+EXEC
+
